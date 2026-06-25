@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Imóveis · SP</title>
+<link rel="stylesheet" href="vendor/leaflet/leaflet.min.css">
+<script src="vendor/leaflet/leaflet.min.js"></script>
+<style>
+  :root{
+    --bg:#F4F5F3;--surface:#FFFFFF;--ink:#16191D;--muted:#6A7178;--faint:#9AA1A8;
+    --hair:#E2E5E1;--accent:#0E6B73;--accent-soft:#E2EEEE;--yes:#1F7A4D;--yes-soft:#E3F1E9;
+    --no:#9AA1A8;--propose:#7A3FB0;--propose-soft:#EFE6F6;
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --r:10px;--shadow:0 1px 2px rgba(20,25,29,.06),0 8px 24px rgba(20,25,29,.08);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{font-family:var(--sans);color:var(--ink);background:var(--bg);font-size:14px;line-height:1.45}
+  button{font-family:inherit}
+  header{display:flex;align-items:center;gap:14px;padding:12px 20px;background:var(--surface);
+    border-bottom:1px solid var(--hair);position:sticky;top:0;z-index:600}
+  .brand{display:flex;align-items:baseline;gap:10px}
+  .brand h1{font-size:15px;font-weight:650;letter-spacing:-.01em;margin:0}
+  .brand .count{font-family:var(--mono);font-size:12px;color:var(--muted);
+    background:var(--bg);border:1px solid var(--hair);padding:1px 7px;border-radius:20px}
+  .export{margin-left:auto;border:1px solid var(--hair);background:var(--surface);color:var(--muted);
+    font-size:12.5px;font-weight:550;padding:6px 12px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:6px}
+  .export:hover{border-color:var(--accent);color:var(--accent)}
+  .export svg{width:14px;height:14px}
+  .toggle{display:flex;background:var(--bg);border:1px solid var(--hair);border-radius:8px;padding:2px}
+  .toggle button{border:0;background:transparent;color:var(--muted);padding:5px 14px;font-size:13px;
+    font-weight:550;border-radius:6px;cursor:pointer}
+  .toggle button.active{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+  main{height:calc(100vh - 53px);position:relative}
+  .view{display:none;height:100%}
+  .view.active{display:block}
+  #map{height:100%;width:100%;background:var(--bg)}
+  .leaflet-popup-content-wrapper{border-radius:var(--r);box-shadow:var(--shadow);padding:0;overflow:hidden}
+  .leaflet-popup-content{margin:0;width:236px!important}
+  .leaflet-popup-tip{box-shadow:var(--shadow)}
+  .pin-card{cursor:default}
+  .pin-card .pc-top{padding:11px 13px 9px}
+  .pin-card .pc-bairro{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);font-weight:650}
+  .pin-card .pc-addr{font-size:12.5px;color:var(--ink);font-weight:550;margin-top:2px;line-height:1.3}
+  .pin-card .pc-meta{display:flex;gap:10px;margin-top:7px;font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+  .pin-card .pc-total{padding:8px 13px;background:var(--accent-soft);display:flex;align-items:baseline;
+    justify-content:space-between;border-top:1px solid var(--hair)}
+  .pin-card .pc-total .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--accent)}
+  .pin-card .pc-total .val{font-family:var(--mono);font-weight:650;font-size:13.5px;color:var(--accent)}
+  .pin-card .pc-open{padding:8px 13px;text-align:center;font-size:12px;font-weight:600;color:var(--accent);
+    cursor:pointer;border-top:1px solid var(--hair)}
+  .pin-card .pc-open:hover{background:var(--accent-soft)}
+  .price-pin{background:var(--surface);border:1.5px solid var(--accent);color:var(--accent);
+    font-family:var(--mono);font-weight:650;font-size:12px;padding:3px 8px;border-radius:20px;
+    box-shadow:var(--shadow);white-space:nowrap;transform:translate(-50%,-50%)}
+  .price-pin.visited{background:var(--yes);border-color:var(--yes);color:#fff}
+  .tablewrap{height:100%;overflow:auto;padding:18px 20px 60px}
+  table{border-collapse:separate;border-spacing:0;width:100%;background:var(--surface);
+    border:1px solid var(--hair);border-radius:var(--r);overflow:hidden;font-size:13px}
+  thead th{position:sticky;top:0;background:#FBFBFA;text-align:left;font-size:11px;text-transform:uppercase;
+    letter-spacing:.05em;color:var(--muted);font-weight:600;padding:10px 12px;border-bottom:1px solid var(--hair);
+    white-space:nowrap;cursor:pointer;user-select:none;z-index:1}
+  thead th.sortable:hover{color:var(--ink)}
+  thead th .arr{opacity:.4;font-size:9px;margin-left:3px}
+  thead th.sorted .arr{opacity:1;color:var(--accent)}
+  tbody td{padding:11px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+  tbody tr{cursor:pointer;transition:background .08s}
+  tbody tr:hover{background:#FAFBFA}
+  tbody tr:last-child td{border-bottom:0}
+  .t-bairro{font-weight:600}
+  .t-addr{color:var(--muted);font-size:12px;margin-top:1px}
+  .num{font-family:var(--mono);text-align:right;white-space:nowrap}
+  .t-total{font-family:var(--mono);font-weight:650;color:var(--accent);text-align:right;white-space:nowrap}
+  .chips{display:flex;flex-wrap:wrap;gap:4px;max-width:230px}
+  .chip{font-size:10.5px;background:var(--bg);border:1px solid var(--hair);color:var(--muted);
+    padding:1px 7px;border-radius:20px;white-space:nowrap}
+  .tag{font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px;white-space:nowrap}
+  .tag.yes{background:var(--yes-soft);color:var(--yes)}
+  .tag.no{background:var(--bg);color:var(--no)}
+  .tag.prop{background:var(--propose-soft);color:var(--propose)}
+  .tag.prop.empty{background:var(--bg);color:var(--faint);font-weight:500}
+  .overlay{position:fixed;inset:0;z-index:1000;display:none}
+  .overlay.open{display:block}
+  .scrim{position:absolute;inset:0;background:rgba(20,25,29,.42);backdrop-filter:blur(2px)}
+  .panel{position:absolute;top:0;right:0;height:100%;width:min(560px,100%);background:var(--surface);
+    box-shadow:-12px 0 40px rgba(20,25,29,.18);overflow-y:auto;animation:slide .22s cubic-bezier(.2,.7,.2,1)}
+  @keyframes slide{from{transform:translateX(28px);opacity:.4}to{transform:none;opacity:1}}
+  @media (prefers-reduced-motion:reduce){.panel{animation:none}}
+  .p-head{padding:22px 26px 18px;border-bottom:1px solid var(--hair);position:sticky;top:0;background:var(--surface);z-index:2}
+  .p-bairro{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);font-weight:650}
+  .p-addr{font-size:19px;font-weight:650;letter-spacing:-.01em;margin:3px 0 0}
+  .p-close{position:absolute;top:18px;right:20px;border:1px solid var(--hair);background:var(--bg);
+    width:30px;height:30px;border-radius:8px;cursor:pointer;color:var(--muted);font-size:16px;line-height:1}
+  .p-close:hover{color:var(--ink)}
+  .p-body{padding:20px 26px 40px}
+  .p-total{display:flex;align-items:baseline;gap:10px;background:var(--accent-soft);
+    border-radius:var(--r);padding:14px 16px;margin-bottom:20px}
+  .p-total .big{font-family:var(--mono);font-size:24px;font-weight:700;color:var(--accent);letter-spacing:-.02em}
+  .p-total .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--accent);font-weight:600}
+  .specs{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-bottom:22px}
+  .spec .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  .spec .v{font-family:var(--mono);font-weight:600;font-size:15px;margin-top:3px}
+  .sec{margin-bottom:22px}
+  .sec h3{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:650;
+    margin:0 0 9px;padding-bottom:7px;border-bottom:1px solid var(--hair)}
+  .p-chips{display:flex;flex-wrap:wrap;gap:6px}
+  .p-chips .chip{font-size:12px;padding:3px 10px}
+  .kv{display:flex;gap:8px;font-size:13px;padding:5px 0}
+  .kv .k{color:var(--muted);min-width:96px;flex-shrink:0}
+  .kv .v{color:var(--ink)}
+  .comment{background:var(--bg);border:1px solid var(--hair);border-radius:var(--r);padding:12px 14px;
+    font-size:13px;color:var(--ink);white-space:pre-wrap}
+  .propose-box{background:var(--propose-soft);border:1px solid #E0CEEE;border-radius:var(--r);padding:12px 14px;font-size:13px}
+  .propose-box.empty{background:var(--bg);border-style:dashed;color:var(--faint)}
+  .actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:6px}
+  .btn{display:inline-flex;align-items:center;gap:7px;text-decoration:none;font-size:13px;font-weight:600;
+    padding:9px 14px;border-radius:9px;border:1px solid var(--hair);background:var(--surface);color:var(--ink);cursor:pointer}
+  .btn:hover{border-color:var(--accent);color:var(--accent)}
+  .btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .btn.primary:hover{filter:brightness(1.07);color:#fff}
+  .btn svg{width:15px;height:15px}
+  .sample-note{position:fixed;bottom:14px;left:20px;z-index:500;font-size:11.5px;color:var(--muted);
+    background:var(--surface);border:1px solid var(--hair);border-radius:8px;padding:6px 11px;box-shadow:var(--shadow);font-family:var(--mono)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand"><h1>Imóveis · SP</h1><span class="count" id="count">0</span></div>
+  <button class="export" onclick="exportCSV()" title="Baixa CSV para importar no Google Sheets">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+    Exportar
+  </button>
+  <div class="toggle">
+    <button id="tab-map" class="active" onclick="setView('map')">Mapa</button>
+    <button id="tab-table" onclick="setView('table')">Comparar</button>
+  </div>
+</header>
+
+<main>
+  <section id="view-map" class="view active"><div id="map"></div></section>
+  <section id="view-table" class="view">
+    <div class="tablewrap">
+      <table id="tbl"><thead><tr id="thead-row"></tr></thead><tbody id="tbody"></tbody></table>
+    </div>
+  </section>
+</main>
+
+<div class="overlay" id="overlay">
+  <div class="scrim" onclick="closeDetail()"></div>
+  <div class="panel" id="panel"></div>
+</div>
+
+<div class="sample-note">dados de exemplo — substituir via Claude Code</div>
+
+<script>
+/* ============================================================
+   BASE DE DADOS — Claude Code edita ESTE array.
+   custo_total = pacote fechado (aluguel + condomínio + IPTU somados na ingestão).
+   lat/lng vêm da geocodificação. Links de Maps/Agenda são gerados dos campos.
+   ============================================================ */
+window.PROPERTIES = [
+  {
+    id:"ex-001", corretor_nome:"Mariana Alves", corretor_tel:"5511991234567",
+    bairro:"Pinheiros", endereco:"Rua dos Pinheiros, 820 - Pinheiros, São Paulo - SP",
+    lat:-23.5645, lng:-46.7019, area_m2:78, quartos:2,
+    infra:["Piscina","Academia","Salão de festas","Portaria 24h"],
+    custo_total:5580, link:"https://exemplo.com.br/imovel/ex-001",
+    visita:true, visita_inicio:"2026-06-28T10:00", visita_min:45,
+    proposta:"Oferecer R$ 5.200 fechado, sinalizar contrato de 30 meses.",
+    comentarios:"Reformado, andar alto, sol da manhã. Cozinha pequena."
+  },
+  {
+    id:"ex-002", corretor_nome:"Rafael Souza", corretor_tel:"5511987654321",
+    bairro:"Vila Madalena", endereco:"Rua Harmonia, 415 - Vila Madalena, São Paulo - SP",
+    lat:-23.5546, lng:-46.6900, area_m2:92, quartos:3,
+    infra:["Salão de festas","Churrasqueira","Playground"],
+    custo_total:6840, link:"https://exemplo.com.br/imovel/ex-002",
+    visita:false, visita_inicio:"", visita_min:45,
+    proposta:"",
+    comentarios:"Sem academia. Rua barulhenta nos fins de semana."
+  },
+  {
+    id:"ex-003", corretor_nome:"Camila Ferreira", corretor_tel:"5511996667788",
+    bairro:"Perdizes", endereco:"Rua Cardoso de Almeida, 1200 - Perdizes, São Paulo - SP",
+    lat:-23.5370, lng:-46.6750, area_m2:70, quartos:2,
+    infra:["Piscina","Academia","Salão de festas","Coworking","Pet place"],
+    custo_total:5390, link:"https://exemplo.com.br/imovel/ex-003",
+    visita:true, visita_inicio:"2026-06-30T15:30", visita_min:45,
+    proposta:"Pedir isenção do 1º mês de condomínio.",
+    comentarios:"Prédio novo, infra completa. Condomínio salgado."
+  },
+  {
+    id:"pec-CA0012", corretor_nome:"Marina (Pecoraro Imóveis)", corretor_tel:"5511976782234",
+    bairro:"Pinheiros", endereco:"Rua Mateus Grou, 518 - Pinheiros, São Paulo - SP",
+    lat:-23.5618264, lng:-46.6859836, area_m2:100, quartos:2,
+    infra:["Lavanderia","Cozinha","Despensa","Quintal","Edícula"],
+    custo_total:7026, link:"https://www.pecoraroimoveis.com.br/imovel/casa/locacao/sao-paulo/sp/pinheiros/CA0012_PEC",
+    visita:false, visita_inicio:"", visita_min:45,
+    proposta:"",
+    comentarios:"Condomínio não informado no anúncio (custo_total = aluguel 6500 + IPTU 525,94)."
+  },
+  {
+    id:"tg-80635", corretor_nome:"Wizard Tgarante", corretor_tel:"5511969258144",
+    bairro:"Brooklin", endereco:"Brooklin, São Paulo - SP",
+    lat:-23.6268017, lng:-46.6881279, area_m2:170, quartos:4,
+    infra:["Ar-condicionado","Armários embutidos","Edícula","Quintal","2 vagas"],
+    custo_total:6900, link:"https://tgarante.com.br/imovel/casa-brooklin-sao-paulo-sp-4-quartos-170m2-80635",
+    visita:false, visita_inicio:"", visita_min:45,
+    proposta:"",
+    comentarios:"Rua/número não informados — coordenada é o centro do bairro Brooklin. Casa, sem condomínio. Sem fiador/caução."
+  },
+  {
+    id:"lopes-REO587708", corretor_nome:"Braulio Buissa", corretor_tel:"",
+    bairro:"Jardim Paulista", endereco:"Alameda Joaquim Eugênio de Lima - Jardim Paulista, São Paulo - SP",
+    lat:-23.5710111, lng:-46.6556779, area_m2:100, quartos:2,
+    infra:["Área verde","Playground","Salão de festas","Elevador","Portaria","Lavabo","Armário embutido","Cozinha mobiliada"],
+    custo_total:9320, link:"https://www.lopes.com.br/imovel/REO587708/aluguel-apartamento-2-quartos-sao-paulo-jardim-paulista",
+    visita:false, visita_inicio:"", visita_min:45,
+    proposta:"",
+    comentarios:"Telefone do corretor não informado. Número da rua não informado — coordenada aproximada na via."
+  },
+  {
+    id:"gki-GP11242", corretor_nome:"GKI Imóveis", corretor_tel:"5511984018248",
+    bairro:"Pinheiros", endereco:"Rua Cláudio Soares, 72 - Pinheiros, São Paulo - SP",
+    lat:-23.5682722, lng:-46.6939524, area_m2:103, quartos:2,
+    infra:["Piscina","Academia","Sauna","Coworking","Playground"],
+    custo_total:9077, link:"https://www.gki.com.br/imovel/GP11242",
+    visita:false, visita_inicio:"", visita_min:45,
+    proposta:"",
+    comentarios:"2 suítes, 2 vagas. Edifício Ahead. custo_total = 6900 + 1578,25 + 598,59."
+  },
+  {
+    id:"gki-GP18937", corretor_nome:"GKI Imóveis", corretor_tel:"5511984018248",
+    bairro:"Pinheiros", endereco:"Rua Cláudio Soares, 72 - Pinheiros, São Paulo - SP",
+    lat:-23.5682722, lng:-46.6939524, area_m2:100, quartos:2,
+    infra:["Piscina","Academia","Sauna","Salão de festas","Lareira","Portaria 24h","Gerador"],
+    custo_total:10340, link:"https://www.gki.com.br/imovel/loft-para-alugar-sao-paulo-pinheiros-100m2-2dormitorios-2vagas/GP18937",
+    visita:false, visita_inicio:"", visita_min:45,
+    proposta:"",
+    comentarios:"ATENÇÃO: endereço lido igual ao GP11242 — confirmar a rua real deste loft. Duplex/loft, 2 suítes, 2 vagas."
+  },
+  {
+    id:"leardi-825405", corretor_nome:"Paulo Roberto Leardi", corretor_tel:"",
+    bairro:"Vila Mascote", endereco:"Vila Mascote, São Paulo - SP",
+    lat:-23.6459168, lng:-46.6675551, area_m2:87, quartos:3,
+    infra:["Piscina","Salão de festas","Brinquedoteca","Churrasqueira","Academia","Sauna","Gerador"],
+    custo_total:5672, link:"https://www.leardi.com.br/imovel/825405-36",
+    visita:false, visita_inicio:"", visita_min:45,
+    proposta:"",
+    comentarios:"Telefone do anúncio é placeholder inválido. Rua/número não informados — coordenada é o centro do bairro. 1 suíte, 2 vagas."
+  },
+  {
+    id:"leardi-827506", corretor_nome:"Paulo Roberto Leardi", corretor_tel:"",
+    bairro:"Vila Mascote", endereco:"Vila Mascote, São Paulo - SP",
+    lat:-23.6459168, lng:-46.6675551, area_m2:100, quartos:3,
+    infra:["Piscina","Piscina aquecida","Salão de festas","Academia","Sala de jogos","Churrasqueira","Pets permitidos"],
+    custo_total:4890, link:"https://www.leardi.com.br/imovel/827506-36",
+    visita:false, visita_inicio:"", visita_min:45,
+    proposta:"",
+    comentarios:"Telefone do anúncio é placeholder inválido. Rua/número não informados — mesma coordenada do 825405 (vão sobrepor no mapa). 1 suíte, 2 vagas."
+  }
+];
+
+/* ============================== motor ============================== */
+const BRL = new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0});
+const props = window.PROPERTIES.slice();
+document.getElementById('count').textContent = props.length;
+
+function mapsLink(p){ return `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lng}`; }
+function waLink(p){ return p.corretor_tel ? `https://wa.me/${p.corretor_tel}` : null; }
+function calLink(p){
+  if(!p.visita_inicio) return null;
+  const start=new Date(p.visita_inicio), end=new Date(start.getTime()+(p.visita_min||45)*60000);
+  const fmt=d=>d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')
+    +'T'+String(d.getHours()).padStart(2,'0')+String(d.getMinutes()).padStart(2,'0')+'00';
+  const q=new URLSearchParams({action:'TEMPLATE',text:`Visita imóvel — ${p.bairro}`,
+    dates:`${fmt(start)}/${fmt(end)}`,details:`Corretor: ${p.corretor_nome||''}\n${p.link||''}`,
+    location:p.endereco||'',ctz:'America/Sao_Paulo'});
+  return `https://calendar.google.com/calendar/render?${q.toString()}`;
+}
+function fmtVisita(p){
+  if(!p.visita_inicio) return '—';
+  return new Date(p.visita_inicio).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+}
+function formatTel(t){ const m=String(t).match(/^55(\d{2})(\d{4,5})(\d{4})$/); return m?`(${m[1]}) ${m[2]}-${m[3]}`:t; }
+
+/* --- export CSV (importável no Google Sheets) --- */
+function exportCSV(){
+  const cols=['Corretor','Telefone','Bairro','Endereço','Área (m²)','Quartos','Infra','Custo total (R$)',
+    'Visita','Data/hora visita','Link agenda','Proposta','Comentários','Link anúncio','Link Maps'];
+  const rows=props.map(p=>[p.corretor_nome||'',p.corretor_tel||'',p.bairro||'',p.endereco||'',
+    p.area_m2??'',p.quartos??'',(p.infra||[]).join('; '),p.custo_total??'',p.visita?'Sim':'Não',
+    p.visita?fmtVisita(p):'',calLink(p)||'',p.proposta||'',p.comentarios||'',p.link||'',mapsLink(p)]);
+  const esc=v=>`"${String(v).replace(/"/g,'""')}"`;
+  const csv='\uFEFF'+[cols,...rows].map(r=>r.map(esc).join(',')).join('\r\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download=`imoveis-sp-${new Date().toISOString().slice(0,10)}.csv`; a.click();
+}
+
+let map;
+function setView(v){
+  document.getElementById('view-map').classList.toggle('active',v==='map');
+  document.getElementById('view-table').classList.toggle('active',v==='table');
+  document.getElementById('tab-map').classList.toggle('active',v==='map');
+  document.getElementById('tab-table').classList.toggle('active',v==='table');
+  if(v==='map'&&map) setTimeout(()=>map.invalidateSize(),50);
+}
+
+function initMap(){
+  const center=props.length?[props.reduce((s,p)=>s+p.lat,0)/props.length,props.reduce((s,p)=>s+p.lng,0)/props.length]:[-23.561,-46.69];
+  map=L.map('map',{zoomControl:true}).setView(center,13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+  // espalha levemente pins que caem na mesma coordenada para não se sobreporem
+  const seen={};
+  props.forEach(p=>{
+    const key=`${p.lat.toFixed(5)},${p.lng.toFixed(5)}`;
+    const n=(seen[key]=(seen[key]||0)+1)-1;
+    let lat=p.lat, lng=p.lng;
+    if(n>0){ const ang=n*2.399963, r=0.0006*Math.ceil(n/6); lat+=r*Math.cos(ang); lng+=r*Math.sin(ang); }
+    const icon=L.divIcon({className:'',html:`<div class="price-pin ${p.visita?'visited':''}">${BRL.format(p.custo_total)}</div>`,iconSize:[0,0]});
+    const m=L.marker([lat,lng],{icon}).addTo(map);
+    m.bindPopup(popupHTML(p),{closeButton:false,offset:[0,-6]});
+    m.on('mouseover',()=>m.openPopup());
+  });
+}
+function popupHTML(p){
+  return `<div class="pin-card">
+    <div class="pc-top">
+      <div class="pc-bairro">${p.bairro}</div>
+      <div class="pc-addr">${p.endereco.split(' - ')[0]}</div>
+      <div class="pc-meta"><span>${p.area_m2} m²</span><span>${p.quartos} qto${p.quartos>1?'s':''}</span><span>${p.visita?'✓ visita':'sem visita'}</span></div>
+    </div>
+    <div class="pc-total"><span class="lbl">Pacote</span><span class="val">${BRL.format(p.custo_total)}</span></div>
+    <div class="pc-open" onclick="openDetail('${p.id}')">Ver detalhes →</div>
+  </div>`;
+}
+
+const COLS=[
+  {k:'bairro',label:'Bairro / Endereço',sort:p=>p.bairro},
+  {k:'area_m2',label:'m²',sort:p=>p.area_m2},
+  {k:'quartos',label:'Qtos',sort:p=>p.quartos},
+  {k:'infra',label:'Infra'},
+  {k:'custo_total',label:'Pacote',sort:p=>p.custo_total},
+  {k:'visita',label:'Visita',sort:p=>p.visita?1:0},
+  {k:'proposta',label:'Proposta'}
+];
+let sortKey='custo_total',sortDir=1;
+function buildHead(){
+  document.getElementById('thead-row').innerHTML=COLS.map(c=>{
+    const on=c.k===sortKey?'sorted':'';
+    const arr=c.sort?`<span class="arr">${c.k===sortKey?(sortDir>0?'▲':'▼'):'⇅'}</span>`:'';
+    return `<th class="${c.sort?'sortable':''} ${on}" ${c.sort?`onclick="sortBy('${c.k}')"`:''}>${c.label}${arr}</th>`;
+  }).join('');
+}
+function sortBy(k){ if(sortKey===k)sortDir*=-1; else{sortKey=k;sortDir=1;} buildHead(); buildBody(); }
+function buildBody(){
+  const col=COLS.find(c=>c.k===sortKey);
+  const rows=[...props].sort((a,b)=>{const va=col.sort(a),vb=col.sort(b);return (va<vb?-1:va>vb?1:0)*sortDir;});
+  document.getElementById('tbody').innerHTML=rows.map(p=>`
+    <tr onclick="openDetail('${p.id}')">
+      <td><div class="t-bairro">${p.bairro}</div><div class="t-addr">${p.endereco.split(' - ')[0]}</div></td>
+      <td class="num">${p.area_m2}</td>
+      <td class="num">${p.quartos}</td>
+      <td><div class="chips">${p.infra.map(i=>`<span class="chip">${i}</span>`).join('')||'<span class="chip">—</span>'}</div></td>
+      <td class="t-total">${BRL.format(p.custo_total)}</td>
+      <td>${p.visita?`<span class="tag yes">✓ ${fmtVisita(p)}</span>`:'<span class="tag no">não</span>'}</td>
+      <td>${p.proposta?'<span class="tag prop">definida</span>':'<span class="tag prop empty">—</span>'}</td>
+    </tr>`).join('');
+}
+
+const ICON={cal:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
+  map:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>',
+  link:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007 0l3-3a5 5 0 00-7-7l-1 1"/><path d="M14 11a5 5 0 00-7 0l-3 3a5 5 0 007 7l1-1"/></svg>',
+  wa:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.5 8.5 0 01-12.5 7.5L3 21l2-5.5A8.5 8.5 0 1121 11.5z"/></svg>'};
+function openDetail(id){
+  const p=props.find(x=>x.id===id); if(!p) return;
+  const cal=calLink(p), wa=waLink(p);
+  document.getElementById('panel').innerHTML=`
+    <div class="p-head">
+      <button class="p-close" onclick="closeDetail()">×</button>
+      <div class="p-bairro">${p.bairro}</div>
+      <h2 class="p-addr">${p.endereco.split(' - ')[0]}</h2>
+    </div>
+    <div class="p-body">
+      <div class="p-total"><span class="big">${BRL.format(p.custo_total)}</span><span class="lbl">pacote / mês</span></div>
+      <div class="specs">
+        <div class="spec"><div class="k">Área</div><div class="v">${p.area_m2} m²</div></div>
+        <div class="spec"><div class="k">Quartos</div><div class="v">${p.quartos}</div></div>
+      </div>
+      <div class="sec"><h3>Infraestrutura</h3>
+        <div class="p-chips">${p.infra.map(i=>`<span class="chip">${i}</span>`).join('')||'<span class="chip">Sem itens registrados</span>'}</div>
+      </div>
+      <div class="sec"><h3>Corretor</h3>
+        <div class="kv"><span class="k">Nome</span><span class="v">${p.corretor_nome||'—'}</span></div>
+        <div class="kv"><span class="k">Telefone</span><span class="v">${p.corretor_tel?formatTel(p.corretor_tel):'—'}</span></div>
+        <div class="kv"><span class="k">Endereço</span><span class="v">${p.endereco}</span></div>
+      </div>
+      <div class="sec"><h3>Visita</h3>
+        <div class="kv"><span class="k">Agendada</span><span class="v">${p.visita?fmtVisita(p):'Não'}</span></div>
+      </div>
+      <div class="sec"><h3>Proposta</h3>
+        <div class="propose-box ${p.proposta?'':'empty'}">${p.proposta||'A definir.'}</div>
+      </div>
+      <div class="sec"><h3>Comentários</h3>
+        <div class="comment">${p.comentarios||'—'}</div>
+      </div>
+      <div class="actions">
+        ${p.link?`<a class="btn primary" href="${p.link}" target="_blank" rel="noopener">${ICON.link} Anúncio</a>`:''}
+        <a class="btn" href="${mapsLink(p)}" target="_blank" rel="noopener">${ICON.map} Maps</a>
+        ${cal?`<a class="btn" href="${cal}" target="_blank" rel="noopener">${ICON.cal} Agendar visita</a>`:''}
+        ${wa?`<a class="btn" href="${wa}" target="_blank" rel="noopener">${ICON.wa} WhatsApp</a>`:''}
+      </div>
+    </div>`;
+  document.getElementById('overlay').classList.add('open');
+}
+function closeDetail(){ document.getElementById('overlay').classList.remove('open'); }
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeDetail(); });
+
+buildHead(); buildBody();
+try{
+  if(typeof L==='undefined') throw new Error('Leaflet não carregou (CDN bloqueado?)');
+  initMap();
+}catch(err){
+  console.error('Mapa indisponível:',err);
+  const el=document.getElementById('map');
+  if(el) el.innerHTML='<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:8px;color:var(--muted);text-align:center;padding:24px">'
+    +'<div style="font-weight:600;color:var(--ink)">Mapa indisponível</div>'
+    +'<div style="font-size:12.5px;max-width:340px">Não foi possível carregar o Leaflet/tiles (sem internet ou CDN bloqueado). A lista em <b>Tabela</b> funciona normalmente.</div></div>';
+}
+</script>
+</body>
+</html>
