@@ -88,6 +88,9 @@
   .tag.st-descartada{background:var(--bg);color:var(--faint)}
   .t-count{font-family:var(--mono);font-weight:650;text-align:right}
   .t-count.zero{color:var(--faint);font-weight:500}
+  .status-select{font-family:var(--sans);font-size:13.5px;font-weight:600;padding:9px 12px;border-radius:9px;
+    border:1px solid var(--hair);background:var(--surface);color:var(--ink);cursor:pointer;min-width:190px}
+  .status-select:focus{outline:none;border-color:var(--accent)}
   .a-site{color:var(--accent);text-decoration:none;font-weight:600}
   .a-site:hover{text-decoration:underline}
   .p-linklist{display:flex;flex-direction:column;gap:6px}
@@ -136,11 +139,38 @@
   .btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
   .btn.primary:hover{filter:brightness(1.07);color:#fff}
   .btn svg{width:15px;height:15px}
+  #gate{position:fixed;inset:0;z-index:2000;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(160deg,#EAF0EF,#F4F5F3);padding:20px}
+  .gate-card{background:var(--surface);border:1px solid var(--hair);border-radius:16px;box-shadow:var(--shadow);
+    padding:34px 30px;width:min(360px,100%);display:flex;flex-direction:column;gap:12px}
+  .gate-card h1{font-size:19px;font-weight:700;letter-spacing:-.01em;margin:0}
+  .gate-card .sub{font-size:12.5px;color:var(--muted);margin:-6px 0 8px}
+  .gate-card input{font-family:var(--sans);font-size:14px;padding:11px 13px;border:1px solid var(--hair);
+    border-radius:10px;background:var(--bg);color:var(--ink)}
+  .gate-card input:focus{outline:none;border-color:var(--accent);background:var(--surface)}
+  .gate-card button{font-family:var(--sans);font-size:14px;font-weight:650;padding:11px;border:0;border-radius:10px;
+    background:var(--accent);color:#fff;cursor:pointer;margin-top:2px}
+  .gate-card button:hover{filter:brightness(1.07)}
+  .gate-err{font-size:12.5px;color:#B23B3B;min-height:16px;text-align:center}
+  .logout{border:1px solid var(--hair);background:var(--surface);color:var(--muted);font-size:12.5px;font-weight:550;
+    padding:6px 11px;border-radius:8px;cursor:pointer;margin-left:10px}
+  .logout:hover{border-color:#B23B3B;color:#B23B3B}
   .sample-note{position:fixed;bottom:14px;left:20px;z-index:500;font-size:11.5px;color:var(--muted);
     background:var(--surface);border:1px solid var(--hair);border-radius:8px;padding:6px 11px;box-shadow:var(--shadow);font-family:var(--mono)}
 </style>
 </head>
 <body>
+
+<div id="gate">
+  <form class="gate-card" onsubmit="return doLogin(event)">
+    <h1>Imóveis · SP</h1>
+    <div class="sub">Acesso restrito — informe usuário e senha.</div>
+    <input id="gate-user" type="text" placeholder="Usuário" autocomplete="username" required autofocus>
+    <input id="gate-pass" type="password" placeholder="Senha" autocomplete="current-password" required>
+    <button type="submit">Entrar</button>
+    <div class="gate-err" id="gate-err"></div>
+  </form>
+</div>
 
 <header>
   <div class="brand"><h1>Imóveis · SP</h1><span class="count" id="count">0</span></div>
@@ -153,6 +183,7 @@
     <button id="tab-table" onclick="setView('table')">Comparar</button>
     <button id="tab-agencies" onclick="setView('agencies')">Imobiliárias</button>
   </div>
+  <button class="logout" onclick="logout()" title="Sair">Sair</button>
 </header>
 
 <main>
@@ -344,6 +375,31 @@ const BRL = new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',maxim
 const props = window.PROPERTIES.slice();
 document.getElementById('count').textContent = props.length;
 
+/* ===== camada de acesso (client-side — ver README/aviso) ===== */
+const AUTH = { user:"will", passHash:"99d6c7926ae452be04f2ce4fca3ee43c87753dac025fa54a0956fb3810c6459c" };
+async function sha256(s){
+  const buf=await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return [...new Uint8Array(buf)].map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+async function doLogin(e){
+  e.preventDefault();
+  const u=document.getElementById('gate-user').value.trim();
+  const p=document.getElementById('gate-pass').value;
+  const err=document.getElementById('gate-err');
+  try{
+    const h=await sha256(p);
+    if(u===AUTH.user && h===AUTH.passHash){ sessionStorage.setItem('imoveis_auth','1'); unlockGate(); }
+    else{ err.textContent='Usuário ou senha inválidos.'; }
+  }catch(ex){ err.textContent='Este navegador não suporta a verificação (precisa de HTTPS ou localhost).'; }
+  return false;
+}
+function unlockGate(){
+  const g=document.getElementById('gate'); if(g) g.style.display='none';
+  if(typeof map!=='undefined' && map) setTimeout(()=>map.invalidateSize(),60);
+}
+function logout(){ sessionStorage.removeItem('imoveis_auth'); location.reload(); }
+if(sessionStorage.getItem('imoveis_auth')==='1'){ const g=document.getElementById('gate'); if(g) g.style.display='none'; }
+
 function mapsLink(p){ return `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lng}`; }
 function waLink(p){ return p.corretor_tel ? `https://wa.me/${p.corretor_tel}` : null; }
 function calLink(p){
@@ -499,6 +555,13 @@ document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeDetail(); });
 
 /* ===== imobiliárias ===== */
 const ags = window.AGENCIES.slice();
+const STATUSES = ["Pesquisada","Contatada","Respondeu","Visitada","Descartada"];
+function loadStatusOverrides(){ try{ return JSON.parse(localStorage.getItem('imoveis_status')||'{}'); }catch(e){ return {}; } }
+function setAgencyStatus(id,val){
+  const ov=loadStatusOverrides(); ov[id]=val; localStorage.setItem('imoveis_status',JSON.stringify(ov));
+  const a=ags.find(x=>x.id===id); if(a) a.status=val;
+  agBuildBody(); openAgency(id);
+}
 function domainOf(u){ try{ return new URL(u).hostname.replace(/^www\./,''); }catch(e){ return ''; } }
 function agencyProps(a){ const d=domainOf(a.site); return d?props.filter(p=>{const pd=domainOf(p.link); return pd&&(pd===d||pd.endsWith('.'+d)||d.endsWith('.'+pd));}):[]; }
 function stClass(s){ return 'st-'+String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z]/g,''); }
@@ -538,7 +601,7 @@ function agBuildBody(){
     </tr>`;
   }).join('');
 }
-function buildAgencies(){ agBuildHead(); agBuildBody(); }
+function buildAgencies(){ const ov=loadStatusOverrides(); ags.forEach(a=>{ if(ov[a.id]) a.status=ov[a.id]; }); agBuildHead(); agBuildBody(); }
 
 function openAgency(id){
   const a=ags.find(x=>x.id===id); if(!a) return;
@@ -551,6 +614,11 @@ function openAgency(id){
       <h2 class="p-addr">${a.nome}</h2>
     </div>
     <div class="p-body">
+      <div class="sec"><h3>Status da pesquisa</h3>
+        <select class="status-select ${stClass(a.status)}" onchange="setAgencyStatus('${a.id}', this.value)">
+          ${STATUSES.map(s=>`<option value="${s}" ${s===a.status?'selected':''}>${s}</option>`).join('')}
+        </select>
+      </div>
       <div class="sec"><h3>Contato</h3>
         <div class="kv"><span class="k">Site</span><span class="v">${a.site?`<a class="a-site" href="${a.site}" target="_blank" rel="noopener">${domainOf(a.site)}</a>`:'—'}</span></div>
         <div class="kv"><span class="k">Corretor</span><span class="v">${a.contato||'—'}</span></div>
