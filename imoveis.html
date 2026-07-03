@@ -86,6 +86,18 @@
   .tag.st-respondeu{background:var(--yes-soft);color:var(--yes)}
   .tag.st-visitada{background:var(--propose-soft);color:var(--propose)}
   .tag.st-descartada{background:var(--bg);color:var(--faint)}
+  .st-select{font-family:var(--sans);font-size:11.5px;font-weight:600;border:1px solid var(--hair);
+    border-radius:20px;padding:3px 26px 3px 10px;cursor:pointer;background:var(--bg);color:var(--muted);
+    appearance:none;-webkit-appearance:none;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%236A7178' stroke-width='3'><path d='M6 9l6 6 6-6'/></svg>");
+    background-repeat:no-repeat;background-position:right 9px center}
+  .st-select:focus{outline:2px solid var(--accent);outline-offset:1px}
+  .st-select.st-pesquisada{background-color:var(--accent-soft);color:var(--accent);border-color:transparent}
+  .st-select.st-contatada{background-color:#FFF3DE;color:#95640A;border-color:transparent}
+  .st-select.st-respondeu{background-color:var(--yes-soft);color:var(--yes);border-color:transparent}
+  .st-select.st-visitada{background-color:var(--propose-soft);color:var(--propose);border-color:transparent}
+  .st-select.st-descartada{background-color:var(--bg);color:var(--faint)}
+  .st-select-lg{font-size:13px;padding:6px 30px 6px 13px;background-position:right 11px center}
   .t-count{font-family:var(--mono);font-weight:650;text-align:right}
   .t-count.zero{color:var(--faint);font-weight:500}
   .status-select{font-family:var(--sans);font-size:13.5px;font-weight:600;padding:9px 12px;border-radius:9px;
@@ -557,15 +569,22 @@ document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeDetail(); });
 const ags = window.AGENCIES.slice();
 const STATUSES = ["Pesquisada","Contatada","Respondeu","Visitada","Descartada"];
 function loadStatusOverrides(){ try{ return JSON.parse(localStorage.getItem('imoveis_status')||'{}'); }catch(e){ return {}; } }
+let openAgencyId=null;
 function setAgencyStatus(id,val){
-  const ov=loadStatusOverrides(); ov[id]=val; localStorage.setItem('imoveis_status',JSON.stringify(ov));
+  const ov=loadStatusOverrides(); ov[id]=val; try{localStorage.setItem('imoveis_status',JSON.stringify(ov));}catch(e){}
   const a=ags.find(x=>x.id===id); if(a) a.status=val;
-  agBuildBody(); openAgency(id);
+  agBuildBody();
+  if(openAgencyId===id && document.getElementById('overlay').classList.contains('open')) openAgency(id);
 }
 function domainOf(u){ try{ return new URL(u).hostname.replace(/^www\./,''); }catch(e){ return ''; } }
 function agencyProps(a){ const d=domainOf(a.site); return d?props.filter(p=>{const pd=domainOf(p.link); return pd&&(pd===d||pd.endsWith('.'+d)||d.endsWith('.'+pd));}):[]; }
 function stClass(s){ return 'st-'+String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z]/g,''); }
 function stTag(s){ return s?`<span class="tag ${stClass(s)}">${s}</span>`:'<span class="tag no">—</span>'; }
+function statusSelect(a){
+  return `<select class="st-select ${stClass(a.status)}" title="Alterar status" onclick="event.stopPropagation()" onchange="setAgencyStatus('${a.id}',this.value)">`
+    + STATUSES.map(s=>`<option ${s===a.status?'selected':''}>${s}</option>`).join('')
+    + `</select>`;
+}
 
 const AG_COLS=[
   {k:'nome',label:'Imobiliária',sort:a=>a.nome.toLowerCase()},
@@ -596,7 +615,7 @@ function agBuildBody(){
       <td><div class="chips">${(a.regioes||[]).map(r=>`<span class="chip">${r}</span>`).join('')||'<span class="chip">—</span>'}</div></td>
       <td><div class="chips">${(a.atua||[]).map(r=>`<span class="chip">${r}</span>`).join('')||'<span class="chip">—</span>'}</div></td>
       <td class="t-count ${n?'':'zero'}">${n}</td>
-      <td>${stTag(a.status)}</td>
+      <td>${statusSelect(a)}</td>
       <td>${contato||'<span class="tag no">—</span>'}</td>
     </tr>`;
   }).join('');
@@ -605,6 +624,7 @@ function buildAgencies(){ const ov=loadStatusOverrides(); ags.forEach(a=>{ if(ov
 
 function openAgency(id){
   const a=ags.find(x=>x.id===id); if(!a) return;
+  openAgencyId=id;
   const linked=agencyProps(a);
   const wa=a.telefone?`https://wa.me/${a.telefone}`:null;
   document.getElementById('panel').innerHTML=`
