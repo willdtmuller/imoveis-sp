@@ -81,6 +81,21 @@
   .tag.no{background:var(--bg);color:var(--no)}
   .tag.prop{background:var(--propose-soft);color:var(--propose)}
   .tag.prop.empty{background:var(--bg);color:var(--faint);font-weight:500}
+  .tag.st-pesquisada{background:var(--accent-soft);color:var(--accent)}
+  .tag.st-contatada{background:#FFF3DE;color:#95640A}
+  .tag.st-respondeu{background:var(--yes-soft);color:var(--yes)}
+  .tag.st-visitada{background:var(--propose-soft);color:var(--propose)}
+  .tag.st-descartada{background:var(--bg);color:var(--faint)}
+  .t-count{font-family:var(--mono);font-weight:650;text-align:right}
+  .t-count.zero{color:var(--faint);font-weight:500}
+  .a-site{color:var(--accent);text-decoration:none;font-weight:600}
+  .a-site:hover{text-decoration:underline}
+  .p-linklist{display:flex;flex-direction:column;gap:6px}
+  .p-linkitem{display:flex;justify-content:space-between;gap:10px;align-items:center;background:var(--bg);
+    border:1px solid var(--hair);border-radius:9px;padding:9px 12px;cursor:pointer}
+  .p-linkitem:hover{border-color:var(--accent)}
+  .p-linkitem .li-b{font-weight:600;font-size:13px}
+  .p-linkitem .li-t{font-family:var(--mono);font-weight:650;color:var(--accent);font-size:12.5px}
   .overlay{position:fixed;inset:0;z-index:1000;display:none}
   .overlay.open{display:block}
   .scrim{position:absolute;inset:0;background:rgba(20,25,29,.42);backdrop-filter:blur(2px)}
@@ -136,6 +151,7 @@
   <div class="toggle">
     <button id="tab-map" class="active" onclick="setView('map')">Mapa</button>
     <button id="tab-table" onclick="setView('table')">Comparar</button>
+    <button id="tab-agencies" onclick="setView('agencies')">Imobiliárias</button>
   </div>
 </header>
 
@@ -144,6 +160,11 @@
   <section id="view-table" class="view">
     <div class="tablewrap">
       <table id="tbl"><thead><tr id="thead-row"></tr></thead><tbody id="tbody"></tbody></table>
+    </div>
+  </section>
+  <section id="view-agencies" class="view">
+    <div class="tablewrap">
+      <table id="tbl-ag"><thead><tr id="thead-ag"></tr></thead><tbody id="tbody-ag"></tbody></table>
     </div>
   </section>
 </main>
@@ -264,6 +285,40 @@ window.PROPERTIES = [
   }
 ];
 
+/* ============================================================
+   IMOBILIÁRIAS PESQUISADAS — Claude Code edita ESTE array.
+   O nº de imóveis é calculado automaticamente casando o domínio
+   de `site` com o domínio do `link` de cada imóvel.
+   status: "Pesquisada" | "Contatada" | "Respondeu" | "Visitada" | "Descartada"
+   ============================================================ */
+window.AGENCIES = [
+  {
+    id:"ag-pecoraro", nome:"Pecoraro Imóveis", site:"https://www.pecoraroimoveis.com.br",
+    telefone:"5511976782234", contato:"Marina", regioes:["Pinheiros"], atua:["Aluguel"],
+    status:"Pesquisada", comentarios:"CRECI 6597J. Contato: Marina (11) 97678-2234; fixo (11) 3813-6122."
+  },
+  {
+    id:"ag-tgarante", nome:"Wizard Tgarante", site:"https://tgarante.com.br",
+    telefone:"5511969258144", contato:"", regioes:["Brooklin"], atua:["Aluguel"],
+    status:"Pesquisada", comentarios:"CRECI 37086-J. Anúncios com 'aluguel sem fiador ou caução'."
+  },
+  {
+    id:"ag-lopes", nome:"Lopes", site:"https://www.lopes.com.br",
+    telefone:"", contato:"Braulio Buissa", regioes:["Jardim Paulista"], atua:["Aluguel","Venda"],
+    status:"Pesquisada", comentarios:"Rede grande. Corretor Braulio Buissa (CRECI 186381-F). Telefone não informado no anúncio."
+  },
+  {
+    id:"ag-gki", nome:"GKI Imóveis", site:"https://www.gki.com.br",
+    telefone:"5511984018248", contato:"", regioes:["Pinheiros"], atua:["Aluguel"],
+    status:"Pesquisada", comentarios:"(11) 3097-0877 / (11) 98401-8248. Forte em Pinheiros (Edifício Ahead)."
+  },
+  {
+    id:"ag-leardi", nome:"Leardi", site:"https://www.leardi.com.br",
+    telefone:"", contato:"Paulo Roberto Leardi", regioes:["Vila Mascote"], atua:["Aluguel"],
+    status:"Pesquisada", comentarios:"Foco em Vila Mascote / zona sul. Telefone dos anúncios vinha como placeholder inválido — confirmar."
+  }
+];
+
 /* ============================== motor ============================== */
 const BRL = new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0});
 const props = window.PROPERTIES.slice();
@@ -305,8 +360,10 @@ let map;
 function setView(v){
   document.getElementById('view-map').classList.toggle('active',v==='map');
   document.getElementById('view-table').classList.toggle('active',v==='table');
+  document.getElementById('view-agencies').classList.toggle('active',v==='agencies');
   document.getElementById('tab-map').classList.toggle('active',v==='map');
   document.getElementById('tab-table').classList.toggle('active',v==='table');
+  document.getElementById('tab-agencies').classList.toggle('active',v==='agencies');
   if(v==='map'&&map) setTimeout(()=>map.invalidateSize(),50);
 }
 
@@ -420,7 +477,90 @@ function openDetail(id){
 function closeDetail(){ document.getElementById('overlay').classList.remove('open'); }
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeDetail(); });
 
-buildHead(); buildBody();
+/* ===== imobiliárias ===== */
+const ags = window.AGENCIES.slice();
+function domainOf(u){ try{ return new URL(u).hostname.replace(/^www\./,''); }catch(e){ return ''; } }
+function agencyProps(a){ const d=domainOf(a.site); return d?props.filter(p=>{const pd=domainOf(p.link); return pd&&(pd===d||pd.endsWith('.'+d)||d.endsWith('.'+pd));}):[]; }
+function stClass(s){ return 'st-'+String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z]/g,''); }
+function stTag(s){ return s?`<span class="tag ${stClass(s)}">${s}</span>`:'<span class="tag no">—</span>'; }
+
+const AG_COLS=[
+  {k:'nome',label:'Imobiliária',sort:a=>a.nome.toLowerCase()},
+  {k:'regioes',label:'Regiões'},
+  {k:'atua',label:'Atua'},
+  {k:'imoveis',label:'Imóveis',sort:a=>agencyProps(a).length},
+  {k:'status',label:'Status',sort:a=>a.status||''},
+  {k:'contato',label:'Contato'}
+];
+let agSortKey='nome',agSortDir=1;
+function agBuildHead(){
+  document.getElementById('thead-ag').innerHTML=AG_COLS.map(c=>{
+    const on=c.k===agSortKey?'sorted':'';
+    const arr=c.sort?`<span class="arr">${c.k===agSortKey?(agSortDir>0?'▲':'▼'):'⇅'}</span>`:'';
+    return `<th class="${c.sort?'sortable':''} ${on}" ${c.sort?`onclick="agSortBy('${c.k}')"`:''}>${c.label}${arr}</th>`;
+  }).join('');
+}
+function agSortBy(k){ if(agSortKey===k)agSortDir*=-1; else{agSortKey=k;agSortDir=1;} agBuildHead(); agBuildBody(); }
+function agBuildBody(){
+  const col=AG_COLS.find(c=>c.k===agSortKey);
+  const rows=[...ags].sort((a,b)=>{const va=col.sort(a),vb=col.sort(b);return (va<vb?-1:va>vb?1:0)*agSortDir;});
+  document.getElementById('tbody-ag').innerHTML=rows.map(a=>{
+    const n=agencyProps(a).length;
+    const contato=a.contato||(a.telefone?formatTel(a.telefone):'');
+    return `
+    <tr onclick="openAgency('${a.id}')">
+      <td><div class="t-bairro">${a.nome}</div><div class="t-addr">${domainOf(a.site)||'—'}</div></td>
+      <td><div class="chips">${(a.regioes||[]).map(r=>`<span class="chip">${r}</span>`).join('')||'<span class="chip">—</span>'}</div></td>
+      <td><div class="chips">${(a.atua||[]).map(r=>`<span class="chip">${r}</span>`).join('')||'<span class="chip">—</span>'}</div></td>
+      <td class="t-count ${n?'':'zero'}">${n}</td>
+      <td>${stTag(a.status)}</td>
+      <td>${contato||'<span class="tag no">—</span>'}</td>
+    </tr>`;
+  }).join('');
+}
+function buildAgencies(){ agBuildHead(); agBuildBody(); }
+
+function openAgency(id){
+  const a=ags.find(x=>x.id===id); if(!a) return;
+  const linked=agencyProps(a);
+  const wa=a.telefone?`https://wa.me/${a.telefone}`:null;
+  document.getElementById('panel').innerHTML=`
+    <div class="p-head">
+      <button class="p-close" onclick="closeDetail()">×</button>
+      <div class="p-bairro">Imobiliária · ${stTag(a.status)}</div>
+      <h2 class="p-addr">${a.nome}</h2>
+    </div>
+    <div class="p-body">
+      <div class="sec"><h3>Contato</h3>
+        <div class="kv"><span class="k">Site</span><span class="v">${a.site?`<a class="a-site" href="${a.site}" target="_blank" rel="noopener">${domainOf(a.site)}</a>`:'—'}</span></div>
+        <div class="kv"><span class="k">Corretor</span><span class="v">${a.contato||'—'}</span></div>
+        <div class="kv"><span class="k">Telefone</span><span class="v">${a.telefone?formatTel(a.telefone):'—'}</span></div>
+      </div>
+      <div class="sec"><h3>Regiões que atende</h3>
+        <div class="p-chips">${(a.regioes||[]).map(r=>`<span class="chip">${r}</span>`).join('')||'<span class="chip">—</span>'}</div>
+      </div>
+      <div class="sec"><h3>Atuação</h3>
+        <div class="p-chips">${(a.atua||[]).map(r=>`<span class="chip">${r}</span>`).join('')||'<span class="chip">—</span>'}</div>
+      </div>
+      <div class="sec"><h3>Imóveis desta imobiliária (${linked.length})</h3>
+        ${linked.length?`<div class="p-linklist">${linked.map(p=>`
+          <div class="p-linkitem" onclick="openDetail('${p.id}')">
+            <span class="li-b">${p.bairro} · ${p.endereco.split(' - ')[0]}</span>
+            <span class="li-t">${BRL.format(p.custo_total)}</span>
+          </div>`).join('')}</div>`:'<div class="comment">Nenhum imóvel cadastrado desta imobiliária ainda.</div>'}
+      </div>
+      <div class="sec"><h3>Comentários</h3>
+        <div class="comment">${a.comentarios||'—'}</div>
+      </div>
+      <div class="actions">
+        ${a.site?`<a class="btn primary" href="${a.site}" target="_blank" rel="noopener">${ICON.link} Site</a>`:''}
+        ${wa?`<a class="btn" href="${wa}" target="_blank" rel="noopener">${ICON.wa} WhatsApp</a>`:''}
+      </div>
+    </div>`;
+  document.getElementById('overlay').classList.add('open');
+}
+
+buildHead(); buildBody(); buildAgencies();
 try{
   if(typeof L==='undefined') throw new Error('Leaflet não carregou (CDN bloqueado?)');
   initMap();
